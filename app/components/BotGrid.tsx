@@ -1,9 +1,17 @@
 "use client";
-import { triggerKillSwitch } from "../actions";
+
 import { useEffect, useState } from "react";
 import Pusher from "pusher-js";
 import { AreaChart, Area, Tooltip, ResponsiveContainer } from "recharts";
-import { Cpu, Server, TrendingUp, DollarSign, List } from "lucide-react";
+import {
+  Cpu,
+  Server,
+  TrendingUp,
+  DollarSign,
+  List,
+  Activity,
+} from "lucide-react";
+import { triggerKillSwitch } from "../actions";
 
 // --- TYPES ---
 interface TradePosition {
@@ -33,7 +41,9 @@ interface BotHistory {
 export default function BotGrid({ initialBots }: { initialBots: any[] }) {
   const [bots, setBots] = useState<Record<string, Bot>>(() => {
     const map: Record<string, Bot> = {};
-    initialBots.forEach((b) => (map[b.bot_name] = b));
+    if (Array.isArray(initialBots)) {
+      initialBots.forEach((b) => (map[b.bot_name] = b));
+    }
     return map;
   });
 
@@ -57,6 +67,7 @@ export default function BotGrid({ initialBots }: { initialBots: any[] }) {
           second: "2-digit",
         });
 
+        // Keep last 20 points
         const newHist = [...botHist, { time: timeStr, equity: data.equity }];
         if (newHist.length > 20) newHist.shift();
 
@@ -92,45 +103,6 @@ function BotCard({ bot, history }: { bot: Bot; history: any[] }) {
         isStale ? "border-red-900/50" : "border-blue-900/30"
       }`}
     >
-      return (
-      <div className="...">
-        {/* ... Header Section ... */}
-        <div className="p-6 pb-2 flex justify-between items-start">
-          <div>{/* ... Bot Name ... */}</div>
-
-          <div className="flex flex-col items-end gap-2">
-            {/* The Equity Number */}
-            <div>
-              <p className="text-slate-400 text-xs uppercase tracking-wider text-right">
-                Equity
-              </p>
-              <p className="text-2xl font-mono font-bold text-white">
-                ${bot.equity?.toFixed(2) || "0.00"}
-              </p>
-            </div>
-
-            {/* 🔴 THE KILL SWITCH BUTTON */}
-            {!isStale && (
-              <button
-                onClick={() => {
-                  if (
-                    confirm(
-                      `Are you sure you want to STOP ${bot.bot_name}? This will close all trades.`
-                    )
-                  ) {
-                    triggerKillSwitch(bot.bot_name);
-                  }
-                }}
-                className="bg-red-900/30 hover:bg-red-600 text-red-500 hover:text-white text-xs font-bold px-3 py-1 rounded border border-red-900/50 transition-colors"
-              >
-                ⛔ KILL SWITCH
-              </button>
-            )}
-          </div>
-        </div>
-        {/* ... Rest of card ... */}
-      </div>
-      );
       {/* HEADER */}
       <div className="p-6 pb-2 flex justify-between items-start">
         <div>
@@ -149,15 +121,37 @@ function BotCard({ bot, history }: { bot: Bot; history: any[] }) {
             </span>
           </div>
         </div>
-        <div className="text-right">
-          <p className="text-slate-400 text-xs uppercase tracking-wider">
-            Equity
-          </p>
-          <p className="text-2xl font-mono font-bold text-white">
-            ${bot.equity?.toFixed(2) || "0.00"}
-          </p>
+
+        <div className="flex flex-col items-end gap-2">
+          <div>
+            <p className="text-slate-400 text-xs uppercase tracking-wider text-right">
+              Equity
+            </p>
+            <p className="text-2xl font-mono font-bold text-white">
+              ${bot.equity?.toFixed(2) || "0.00"}
+            </p>
+          </div>
+
+          {/* 🔴 KILL SWITCH (Only shows if bot is online) */}
+          {!isStale && (
+            <button
+              onClick={() => {
+                if (
+                  confirm(
+                    `Are you sure you want to STOP ${bot.bot_name}? This will close all trades.`
+                  )
+                ) {
+                  triggerKillSwitch(bot.bot_name);
+                }
+              }}
+              className="bg-red-900/30 hover:bg-red-600 text-red-500 hover:text-white text-xs font-bold px-3 py-1 rounded border border-red-900/50 transition-colors"
+            >
+              ⛔ KILL SWITCH
+            </button>
+          )}
         </div>
       </div>
+
       {/* GRAPH AREA */}
       <div className="h-32 w-full mt-4">
         <ResponsiveContainer width="100%" height="100%">
@@ -180,7 +174,6 @@ function BotCard({ bot, history }: { bot: Bot; history: any[] }) {
                 borderColor: "#1e293b",
               }}
               itemStyle={{ color: "#fff" }}
-              // --- THIS IS THE FIXED LINE ---
               formatter={(value: any) => [
                 `$${Number(value).toFixed(2)}`,
                 "Equity",
@@ -198,6 +191,7 @@ function BotCard({ bot, history }: { bot: Bot; history: any[] }) {
           </AreaChart>
         </ResponsiveContainer>
       </div>
+
       {/* METRICS GRID */}
       <div className="grid grid-cols-2 gap-4 p-6 border-t border-slate-800/50 bg-slate-900/50">
         <div className="space-y-3">
@@ -237,6 +231,7 @@ function BotCard({ bot, history }: { bot: Bot; history: any[] }) {
           </div>
         </div>
       </div>
+
       {/* ACTIVE TRADES LIST */}
       {bot.active_positions && bot.active_positions.length > 0 && (
         <div className="bg-slate-950/50 p-4 border-t border-slate-800">
