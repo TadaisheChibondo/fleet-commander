@@ -9,8 +9,8 @@ import {
   TrendingUp,
   DollarSign,
   List,
-  History,
-  Activity,
+  Lock,
+  Unlock,
 } from "lucide-react";
 import { triggerKillSwitch } from "../actions";
 
@@ -39,7 +39,7 @@ interface Bot {
   equity: number;
   balance: number;
   active_positions?: TradePosition[];
-  recent_history?: ClosedTrade[]; // <--- NEW FIELD
+  recent_history?: ClosedTrade[];
   timestamp: number;
 }
 
@@ -57,6 +57,10 @@ export default function BotGrid({ initialBots }: { initialBots: any[] }) {
   });
 
   const [history, setHistory] = useState<BotHistory>({});
+
+  // --- ADMIN STATE ---
+  const [adminPin, setAdminPin] = useState<string>("");
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     const pusher = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY!, {
@@ -81,28 +85,95 @@ export default function BotGrid({ initialBots }: { initialBots: any[] }) {
       });
     });
 
+    // Check if we have a saved PIN in browser memory
+    const savedPin = localStorage.getItem("fleet_admin_pin");
+    if (savedPin) {
+      setAdminPin(savedPin);
+      setIsAdmin(true);
+    }
+
     return () => {
       pusher.unsubscribe("bot-fleet");
     };
   }, []);
 
+  const handleAdminAuth = () => {
+    if (isAdmin) {
+      // LOGOUT
+      setIsAdmin(false);
+      setAdminPin("");
+      localStorage.removeItem("fleet_admin_pin");
+    } else {
+      // LOGIN
+      const pin = prompt("ENTER COMMANDER PIN:");
+      if (pin) {
+        setAdminPin(pin);
+        setIsAdmin(true);
+        localStorage.setItem("fleet_admin_pin", pin);
+      }
+    }
+  };
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-      {Object.values(bots).map((bot) => (
-        <BotCard
-          key={bot.bot_name}
-          bot={bot}
-          history={history[bot.bot_name] || []}
-        />
-      ))}
+    <div>
+      {/* ADMIN TOGGLE (Floating Bottom Right or Top Right) */}
+      <div className="flex justify-end mb-4">
+        <button
+          onClick={handleAdminAuth}
+          className={`flex items-center gap-2 px-3 py-1 rounded text-xs font-mono border transition-colors ${
+            isAdmin
+              ? "bg-red-900/20 border-red-500/50 text-red-400 hover:bg-red-900/40"
+              : "bg-slate-900 border-slate-700 text-slate-500 hover:text-slate-300"
+          }`}
+        >
+          {isAdmin ? <Unlock size={14} /> : <Lock size={14} />}
+          {isAdmin ? "COMMANDER MODE ACTIVE" : "VIEW ONLY"}
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        {Object.values(bots).map((bot) => (
+          <BotCard
+            key={bot.bot_name}
+            bot={bot}
+            history={history[bot.bot_name] || []}
+            isAdmin={isAdmin} // Pass permission down
+            adminPin={adminPin} // Pass key down
+          />
+        ))}
+      </div>
     </div>
   );
 }
 
-function BotCard({ bot, history }: { bot: Bot; history: any[] }) {
-  const [view, setView] = useState<"ACTIVE" | "HISTORY">("ACTIVE"); // Toggle State
+function BotCard({
+  bot,
+  history,
+  isAdmin,
+  adminPin,
+}: {
+  bot: Bot;
+  history: any[];
+  isAdmin: boolean;
+  adminPin: string;
+}) {
+  const [view, setView] = useState<"ACTIVE" | "HISTORY">("ACTIVE");
   const isStale = Date.now() / 1000 - bot.timestamp > 30;
   const statusText = isStale ? "SIGNAL LOST" : bot.status.replace("_", " ");
+
+  const handleKillSwitch = async () => {
+    if (!confirm(`⚠️ WARNING: Are you sure you want to STOP ${bot.bot_name}?`))
+      return;
+
+    // Call Server Action with the PIN
+    const result = await triggerKillSwitch(bot.bot_name, adminPin);
+
+    if (result.success) {
+      alert(`✅ ${result.message}`);
+    } else {
+      alert(`❌ ${result.message}`);
+    }
+  };
 
   return (
     <div
@@ -138,18 +209,12 @@ function BotCard({ bot, history }: { bot: Bot; history: any[] }) {
               ${bot.equity?.toFixed(2) || "0.00"}
             </p>
           </div>
-          {!isStale && (
+
+          {/* 🔴 KILL SWITCH (ONLY VISIBLE IF ADMIN) */}
+          {!isStale && isAdmin && (
             <button
-              onClick={() => {
-                if (
-                  confirm(
-                    `Are you sure you want to STOP ${bot.bot_name}? This will close all trades.`
-                  )
-                ) {
-                  triggerKillSwitch(bot.bot_name);
-                }
-              }}
-              className="bg-red-900/30 hover:bg-red-600 text-red-500 hover:text-white text-xs font-bold px-3 py-1 rounded border border-red-900/50 transition-colors"
+              onClick={handleKillSwitch}
+              className="bg-red-900/30 hover:bg-red-600 text-red-500 hover:text-white text-xs font-bold px-3 py-1 rounded border border-red-900/50 transition-colors animate-pulse"
             >
               ⛔ KILL SWITCH
             </button>
@@ -157,7 +222,7 @@ function BotCard({ bot, history }: { bot: Bot; history: any[] }) {
         </div>
       </div>
 
-      {/* GRAPH AREA */}
+      {/* GRAPH AREA (Code remains same...) */}
       <div className="h-32 w-full mt-4">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={history}>
@@ -197,7 +262,7 @@ function BotCard({ bot, history }: { bot: Bot; history: any[] }) {
         </ResponsiveContainer>
       </div>
 
-      {/* METRICS GRID */}
+      {/* METRICS & TABS (Code remains same...) */}
       <div className="grid grid-cols-2 gap-4 p-6 border-t border-slate-800/50 bg-slate-900/50">
         <div className="space-y-3">
           <div className="flex items-center justify-between text-sm">
@@ -237,7 +302,6 @@ function BotCard({ bot, history }: { bot: Bot; history: any[] }) {
         </div>
       </div>
 
-      {/* TABS FOR ACTIVE / HISTORY */}
       <div className="flex border-t border-slate-800">
         <button
           onClick={() => setView("ACTIVE")}
@@ -261,9 +325,7 @@ function BotCard({ bot, history }: { bot: Bot; history: any[] }) {
         </button>
       </div>
 
-      {/* LIST VIEW */}
       <div className="bg-slate-950/50 p-4 min-h-[150px]">
-        {/* VIEW: ACTIVE POSITIONS */}
         {view === "ACTIVE" && (
           <div className="space-y-2">
             {(!bot.active_positions || bot.active_positions.length === 0) && (
@@ -298,7 +360,6 @@ function BotCard({ bot, history }: { bot: Bot; history: any[] }) {
           </div>
         )}
 
-        {/* VIEW: HISTORY */}
         {view === "HISTORY" && (
           <div className="space-y-2">
             {(!bot.recent_history || bot.recent_history.length === 0) && (

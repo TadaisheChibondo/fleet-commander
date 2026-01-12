@@ -8,12 +8,19 @@ const redis = new Redis({
   token: process.env.UPSTASH_REDIS_REST_TOKEN!,
 });
 
-export async function triggerKillSwitch(botName: string) {
-  // FIX: We now wrap the command in a JSON object and stringify it
-  // This ensures it is stored as '{"action":"STOP"}' in the database
+export async function triggerKillSwitch(botName: string, secret: string) {
+  // 1. SECURITY CHECK
+  // We compare the secret sent from the button against the real one in Vercel
+  if (secret !== process.env.ADMIN_SECRET) {
+    console.log(`⚠️ Unauthorized Kill Switch attempt on ${botName}`);
+    return { success: false, message: "⛔ INCORRECT PASSWORD" };
+  }
+
+  // 2. EXECUTE COMMAND (Only if password matches)
   const payload = JSON.stringify({ action: "STOP" });
 
   await redis.set(`cmd:${botName}`, payload);
   console.log(`💥 Kill command sent to ${botName}`);
   revalidatePath("/");
+  return { success: true, message: "💥 COMMAND SENT" };
 }
