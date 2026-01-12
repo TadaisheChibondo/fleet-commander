@@ -9,8 +9,11 @@ const redis = new Redis({
 });
 
 export async function triggerKillSwitch(botName: string) {
-  // Set the command key that the Python bot is listening for
-  await redis.set(`cmd:${botName}`, "STOP");
+  // FIX: We now wrap the command in a JSON object and stringify it
+  // This ensures it is stored as '{"action":"STOP"}' in the database
+  const payload = JSON.stringify({ action: "STOP" });
+
+  await redis.set(`cmd:${botName}`, payload);
   console.log(`💥 Kill command sent to ${botName}`);
   revalidatePath("/");
 }
