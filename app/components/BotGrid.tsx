@@ -9,6 +9,7 @@ import {
   TrendingUp,
   DollarSign,
   List,
+  History,
   Activity,
 } from "lucide-react";
 import { triggerKillSwitch } from "../actions";
@@ -21,6 +22,13 @@ interface TradePosition {
   price: number;
 }
 
+interface ClosedTrade {
+  symbol: string;
+  type: string;
+  profit: number;
+  time: string;
+}
+
 interface Bot {
   bot_name: string;
   status: string;
@@ -31,6 +39,7 @@ interface Bot {
   equity: number;
   balance: number;
   active_positions?: TradePosition[];
+  recent_history?: ClosedTrade[]; // <--- NEW FIELD
   timestamp: number;
 }
 
@@ -66,11 +75,8 @@ export default function BotGrid({ initialBots }: { initialBots: any[] }) {
           minute: "2-digit",
           second: "2-digit",
         });
-
-        // Keep last 20 points
         const newHist = [...botHist, { time: timeStr, equity: data.equity }];
         if (newHist.length > 20) newHist.shift();
-
         return { ...prev, [data.bot_name]: newHist };
       });
     });
@@ -94,6 +100,7 @@ export default function BotGrid({ initialBots }: { initialBots: any[] }) {
 }
 
 function BotCard({ bot, history }: { bot: Bot; history: any[] }) {
+  const [view, setView] = useState<"ACTIVE" | "HISTORY">("ACTIVE"); // Toggle State
   const isStale = Date.now() / 1000 - bot.timestamp > 30;
   const statusText = isStale ? "SIGNAL LOST" : bot.status.replace("_", " ");
 
@@ -131,8 +138,6 @@ function BotCard({ bot, history }: { bot: Bot; history: any[] }) {
               ${bot.equity?.toFixed(2) || "0.00"}
             </p>
           </div>
-
-          {/* 🔴 KILL SWITCH (Only shows if bot is online) */}
           {!isStale && (
             <button
               onClick={() => {
@@ -232,14 +237,41 @@ function BotCard({ bot, history }: { bot: Bot; history: any[] }) {
         </div>
       </div>
 
-      {/* ACTIVE TRADES LIST */}
-      {bot.active_positions && bot.active_positions.length > 0 && (
-        <div className="bg-slate-950/50 p-4 border-t border-slate-800">
-          <div className="flex items-center gap-2 mb-3 text-xs uppercase text-slate-500 font-bold tracking-wider">
-            <List size={14} /> Active Positions
-          </div>
+      {/* TABS FOR ACTIVE / HISTORY */}
+      <div className="flex border-t border-slate-800">
+        <button
+          onClick={() => setView("ACTIVE")}
+          className={`flex-1 p-3 text-xs font-bold uppercase tracking-wider transition-colors ${
+            view === "ACTIVE"
+              ? "bg-slate-800 text-blue-400"
+              : "bg-slate-950 text-slate-500 hover:text-slate-300"
+          }`}
+        >
+          Active Trades
+        </button>
+        <button
+          onClick={() => setView("HISTORY")}
+          className={`flex-1 p-3 text-xs font-bold uppercase tracking-wider transition-colors ${
+            view === "HISTORY"
+              ? "bg-slate-800 text-blue-400"
+              : "bg-slate-950 text-slate-500 hover:text-slate-300"
+          }`}
+        >
+          History
+        </button>
+      </div>
+
+      {/* LIST VIEW */}
+      <div className="bg-slate-950/50 p-4 min-h-[150px]">
+        {/* VIEW: ACTIVE POSITIONS */}
+        {view === "ACTIVE" && (
           <div className="space-y-2">
-            {bot.active_positions.map((trade, idx) => (
+            {(!bot.active_positions || bot.active_positions.length === 0) && (
+              <p className="text-slate-600 text-center text-sm py-4 italic">
+                No open trades...
+              </p>
+            )}
+            {bot.active_positions?.map((trade, idx) => (
               <div
                 key={idx}
                 className="flex justify-between items-center text-sm font-mono bg-slate-900 p-2 rounded border border-slate-800"
@@ -264,8 +296,44 @@ function BotCard({ bot, history }: { bot: Bot; history: any[] }) {
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
+
+        {/* VIEW: HISTORY */}
+        {view === "HISTORY" && (
+          <div className="space-y-2">
+            {(!bot.recent_history || bot.recent_history.length === 0) && (
+              <p className="text-slate-600 text-center text-sm py-4 italic">
+                No recent history...
+              </p>
+            )}
+            {bot.recent_history?.map((trade, idx) => (
+              <div
+                key={idx}
+                className="flex justify-between items-center text-sm font-mono bg-slate-900/50 p-2 rounded border border-slate-800/50 opacity-75"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-500 text-xs">{trade.time}</span>
+                  <span
+                    className={
+                      trade.type === "BUY" ? "text-green-500" : "text-red-500"
+                    }
+                  >
+                    {trade.type}
+                  </span>
+                  <span className="text-slate-400">{trade.symbol}</span>
+                </div>
+                <span
+                  className={
+                    trade.profit >= 0 ? "text-green-400" : "text-red-400"
+                  }
+                >
+                  ${trade.profit.toFixed(2)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
